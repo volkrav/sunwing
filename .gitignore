@@ -1,5 +1,6 @@
 ### Python ###
 # my
+*.db
 /app/data/*
 *.DS_Store
 !.keep
