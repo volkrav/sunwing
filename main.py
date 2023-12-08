@@ -1,16 +1,14 @@
 import json
-from typing import Any, Generator
-from bs4 import BeautifulSoup, ResultSet, Tag
+from typing import Generator
 import requests
 import hashlib
-import urllib.parse
 from datetime import datetime
+from config import DAY_IN_DEC, DAY_IN_JAN, MAX_PRICE, USERS_ID
 
-from db_api import add_offer_hash, create_table
+from db_api import add_offer_hash, create_table, does_offer_exist
+from utils import send_msg_in_tg
 
 url = 'https://www.sunwing.ca/page-data/en/promotion/packages/last-minute-dominican-republic-vacations/page-data.json'
-
-API_link = 'https://api.telegram.org/bot5522301142:AAFpmTT9UiFrqcYibr1F7Mied5CTIRqBWF0'
 
 
 def get_json_from_api(url):
@@ -18,7 +16,7 @@ def get_json_from_api(url):
         resp = requests.get(url)
     except Exception as err:
         send_msg_in_tg(
-            f'got an error in the "get_json_from_api": {err}')
+            f'got an error in the "get_json_from_api": {err.args[0]}')
         exit(1)
     if resp.status_code == 200:
         return resp.json()
@@ -56,20 +54,14 @@ def make_hash(offer: dict) -> str:
 
 def make_msg_for_tg(offer: dict):
     date = datetime.strptime(offer["date"], '%Y-%m-%dT%H:%M:%S').date()
-    day = date.day
-    month = date.month
     format_date = datetime.strftime(date, "%b %d, %Y %A")
-    if (month == 12 and day >= 14) or (month == 1 and day < 10):
-        print(day, month)
-    else:
-        print(f'\t NOO {day}, {month}')
     return (
         f'from: {offer["gateway"]}\n\n'
         f'to: {offer["destination"]}\n\n'
         f'{offer["title"]}\n'
         f'rating: {offer["rating"]}\n\n'
         f'{format_date}\n'
-        f'{offer["days"]}\n'
+        f'{offer["days"]} days\n'
         f'{offer["conditions"]}\n\n'
         f'${offer["price"]}\n\n'
         f'{offer["link"]}'
@@ -78,38 +70,20 @@ def make_msg_for_tg(offer: dict):
 
 def checking_compliance(offer: dict) -> bool:
     date = datetime.strptime(offer["date"], '%Y-%m-%dT%H:%M:%S').date()
-    return offer['price'] < 1650 and ((date.month == 12 and date.day >= 14) or (date.month == 1 and date.day < 10))
-
-
-def send_msg_in_tg(msg):
-    resp = requests.get(
-        API_link +
-        f'/sendMessage?chat_id=234043544&text={urllib.parse.quote(msg)}'
-    )
-    return resp.status_code
+    return offer['price'] < MAX_PRICE and ((date.month == 12 and date.day >= DAY_IN_JAN) or (date.month == 1 and date.day < DAY_IN_JAN))
 
 
 def main():
-    # create_table()
-    # with open('index.html') as file:
-    #     data = file.read()
+    create_table()
 
-    # soup = BeautifulSoup(data, 'lxml')
-
-    # for hotel in make_hotels_list(soup):
-    #     # print(make_hash(hotel))
-    #     add_hotel_hash(make_hash(hotel))
-    #     status = send_msg_in_tg(make_msg_for_tg(hotel))
-    #     if status != 200:
-    #         print('error')
-
-    #     break
     for offer in make_offers_list(get_json_from_api(url)):
-        print(make_hash(offer))
-        # if checking_compliance(offer):
-            # send_msg_in_tg(make_msg_for_tg(offer))
-        # print(offer)
-        break
+        hashed_offer = make_hash(offer)
+        if does_offer_exist(hashed_offer):
+            continue
+        add_offer_hash(hashed_offer)
+        if checking_compliance(offer):
+            for user_id in USERS_ID:
+                send_msg_in_tg(make_msg_for_tg(offer), user_id)
 
 
 if __name__ == '__main__':
