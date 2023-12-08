@@ -14,7 +14,7 @@ def create_table():
     except Exception as e:
         print(e)
 
-def add_hotel_hash(hash):
+def add_offer_hash(hash):
     statement = (
         f'insert into hashes (hash) values=?', (hash, )
     )

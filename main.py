@@ -4,65 +4,81 @@ from bs4 import BeautifulSoup, ResultSet, Tag
 import requests
 import hashlib
 import urllib.parse
+from datetime import datetime
 
-from db_api import add_hotel_hash, create_table
+from db_api import add_offer_hash, create_table
 
-url = 'https://www.sunwing.ca/en/promotion/packages/last-minute-vacations/from-calgary'
+url = 'https://www.sunwing.ca/page-data/en/promotion/packages/last-minute-dominican-republic-vacations/page-data.json'
+
 API_link = 'https://api.telegram.org/bot5522301142:AAFpmTT9UiFrqcYibr1F7Mied5CTIRqBWF0'
 
 
-def get_request(url):
-    resp = requests.get(url)
-
+def get_json_from_api(url):
+    try:
+        resp = requests.get(url)
+    except Exception as err:
+        send_msg_in_tg(
+            f'got an error in the "get_json_from_api": {err}')
+        exit(1)
     if resp.status_code == 200:
-        # with open('index.html', 'w', encoding='utf-8') as file:
-        #     file.write(resp.text)
-        return resp.text
+        return resp.json()
+    else:
+        send_msg_in_tg(
+            f'got an error in the "get_json_from_api": status_code {resp.status_code}')
+        return
 
 
-def make_hotels_list(soup: BeautifulSoup) -> Generator:
-    travel_deals: Tag = soup.find('div', attrs={'id': 'travel-deals'})
-    hotel_cards: ResultSet[Any] = travel_deals.find_all(
-        'div', attrs={'class': 'Grid-module--grid__item--voOrq'})
-    for card in hotel_cards:
-        heading_module = card.find(
-            'h3', attrs={'class': 'Heading-module--heading--h5--3c7Iw'})
-        hotel_detail_days = card.find(
-            'div', class_='Hotel-module--hotelDetailsDays--1_9lF')
-        date, days, conditions = [
-            item.text for item in hotel_detail_days.children]
+def make_offers_list(json_from_api: dict) -> Generator:
+    result = json_from_api['result']['data']['contentfulFluidLayout']['pageSections']['pageSections'][1]['fields']['admodule'][1]
+    offers = result['PromotionGroups'][0]['Offers']
+    for offer in offers:
+        destination = offer['Destination']['Name'] + \
+            ', ' + offer['Destination']['CountryName']
         yield {
-            'destination': heading_module.span.text.strip(),
-            'title': heading_module.div.text.strip(),
-            'rating': card.find('div', class_="StarRating-module--rating--2P6IC")['rating'],
-            'date': date,
-            'days': days,
-            'conditions': conditions,
-            'price': card.find('span', class_='Hotel-module--hotelDetailsAmount--2oExH').text.replace('$', '').strip(),
-            'image': card.find('div', class_='CardImage-module--image--18emS').picture.img['src'],
-            'link': card.find('a', class_='CardBuilder-module--cardLink--uva-c')['href'],
+            'gateway': offer['Gateway']['Name'],
+            'destination': destination,
+            'title': offer['AccommodationInfo']['AccommodationName'],
+            'rating': offer['AccommodationInfo']['StarRating'],
+            'date': offer['DepartureDate'],
+            'days': offer['Duration'],
+            'conditions': offer['MealPlan'],
+            'price': offer['Price'],
+            'link': offer['DeepLink'],
         }
 
 
-def make_hash(hotel_card: dict) -> str:
+def make_hash(offer: dict) -> str:
     dhash = hashlib.md5()
-    encoded = json.dumps(hotel_card, sort_keys=True).encode()
+    encoded = json.dumps(offer, sort_keys=True).encode()
     dhash.update(encoded)
     return dhash.hexdigest()
 
 
-def make_msg_for_tg(hotel: dict):
+def make_msg_for_tg(offer: dict):
+    date = datetime.strptime(offer["date"], '%Y-%m-%dT%H:%M:%S').date()
+    day = date.day
+    month = date.month
+    format_date = datetime.strftime(date, "%b %d, %Y %A")
+    if (month == 12 and day >= 14) or (month == 1 and day < 10):
+        print(day, month)
+    else:
+        print(f'\t NOO {day}, {month}')
     return (
-        f'{hotel["destination"]}\n\n'
-        f'{hotel["title"]}\n'
-        f'rating: {hotel["rating"]}\n\n'
-        f'{hotel["date"]}\n'
-        f'{hotel["days"]}\n'
-        f'{hotel["conditions"]}\n\n'
-        f'${hotel["price"]}\n\n'
-        # f'{hotel["image"]}'
-        f'{hotel["link"]}'
+        f'from: {offer["gateway"]}\n\n'
+        f'to: {offer["destination"]}\n\n'
+        f'{offer["title"]}\n'
+        f'rating: {offer["rating"]}\n\n'
+        f'{format_date}\n'
+        f'{offer["days"]}\n'
+        f'{offer["conditions"]}\n\n'
+        f'${offer["price"]}\n\n'
+        f'{offer["link"]}'
     )
+
+
+def checking_compliance(offer: dict) -> bool:
+    date = datetime.strptime(offer["date"], '%Y-%m-%dT%H:%M:%S').date()
+    return offer['price'] < 1650 and ((date.month == 12 and date.day >= 14) or (date.month == 1 and date.day < 10))
 
 
 def send_msg_in_tg(msg):
@@ -74,18 +90,25 @@ def send_msg_in_tg(msg):
 
 
 def main():
-    create_table()
-    with open('index.html') as file:
-        data = file.read()
+    # create_table()
+    # with open('index.html') as file:
+    #     data = file.read()
 
-    soup = BeautifulSoup(data, 'lxml')
-    for hotel in make_hotels_list(soup):
-        # print(make_hash(hotel))
-        add_hotel_hash(make_hash(hotel))
-        status = send_msg_in_tg(make_msg_for_tg(hotel))
-        if status != 200:
-            print('error')
+    # soup = BeautifulSoup(data, 'lxml')
 
+    # for hotel in make_hotels_list(soup):
+    #     # print(make_hash(hotel))
+    #     add_hotel_hash(make_hash(hotel))
+    #     status = send_msg_in_tg(make_msg_for_tg(hotel))
+    #     if status != 200:
+    #         print('error')
+
+    #     break
+    for offer in make_offers_list(get_json_from_api(url)):
+        print(make_hash(offer))
+        # if checking_compliance(offer):
+            # send_msg_in_tg(make_msg_for_tg(offer))
+        # print(offer)
         break
 
 
