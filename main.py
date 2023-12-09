@@ -8,8 +8,8 @@ from config import DAY_IN_DEC, DAY_IN_JAN, MAX_PRICE, USERS_ID
 from db_api import add_offer_hash, create_table, does_offer_exist
 from utils import send_msg_in_tg
 
-url = 'https://www.sunwing.ca/page-data/en/promotion/packages/last-minute-dominican-republic-vacations/page-data.json'
-
+# url = 'https://www.sunwing.ca/page-data/en/promotion/packages/last-minute-dominican-republic-vacations/page-data.json'
+url ='https://www.sunwing.ca/page-data/en/promotion/packages/last-minute-vacations/from-calgary/page-data.json'
 
 def get_json_from_api(url):
     try:
