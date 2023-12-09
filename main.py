@@ -70,7 +70,7 @@ def make_msg_for_tg(offer: dict):
 
 def checking_compliance(offer: dict) -> bool:
     date = datetime.strptime(offer["date"], '%Y-%m-%dT%H:%M:%S').date()
-    return offer['price'] < MAX_PRICE and ((date.month == 12 and date.day >= DAY_IN_JAN) or (date.month == 1 and date.day < DAY_IN_JAN))
+    return offer['price'] < MAX_PRICE and ((date.month == 12 and date.day >= DAY_IN_DEC) or (date.month == 1 and date.day < DAY_IN_JAN))
 
 
 def main():
